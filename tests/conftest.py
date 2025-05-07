@@ -2,33 +2,38 @@ import sys
 import os
 
 
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(root_dir)
+# Определяем корневую директорию проекта
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-root_dir_content = os.listdir(BASE_DIR)
-PROJECT_DIR_NAME = 'yatube_api'
+# Устанавливаем базовую директорию
+PROJECT_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+root_contents = os.listdir(PROJECT_BASE_DIR)
+YATUBE_DIR_NAME = 'yatube_api'
 
+# Проверяем наличие директории проекта
 if (
-        PROJECT_DIR_NAME not in root_dir_content
-        or not os.path.isdir(os.path.join(BASE_DIR, PROJECT_DIR_NAME))
+        YATUBE_DIR_NAME not in root_contents
+        or not os.path.isdir(os.path.join(PROJECT_BASE_DIR, YATUBE_DIR_NAME))
 ):
     raise AssertionError(
-        f'В директории `{BASE_DIR}` не найдена папка c проектом '
-        f'`{PROJECT_DIR_NAME}`. Убедитесь, что у вас верная структура '
-        'проекта.'
+        f'Директория проекта `{YATUBE_DIR_NAME}` не найдена в `{PROJECT_BASE_DIR}`. '
+        'Пожалуйста, проверьте структуру вашего проекта.'
     )
 
-MANAGE_PATH = os.path.join(BASE_DIR, PROJECT_DIR_NAME)
-project_dir_content = os.listdir(MANAGE_PATH)
-FILENAME = 'manage.py'
+# Путь к директории с файлом manage.py
+MANAGE_DIR = os.path.join(PROJECT_BASE_DIR, YATUBE_DIR_NAME)
+manage_dir_contents = os.listdir(MANAGE_DIR)
+MANAGE_FILENAME = 'manage.py'
 
-if FILENAME not in project_dir_content:
+# Проверяем наличие файла manage.py
+if MANAGE_FILENAME not in manage_dir_contents:
     raise AssertionError(
-        f'В директории `{MANAGE_PATH}` не найден файл `{FILENAME}`. '
-        f'Убедитесь, что у вас верная структура проекта.'
+        f'Файл `{MANAGE_FILENAME}` не обнаружен в директории `{MANAGE_DIR}`. '
+        'Пожалуйста, проверьте структуру вашего проекта.'
     )
 
+# Регистрируем плагины для pytest
 pytest_plugins = [
     'tests.fixtures.fixture_user',
     'tests.fixtures.fixture_data',

@@ -6,271 +6,285 @@ from posts.models import Post
 
 
 class TestPostAPI:
-    VALID_DATA = {'text': 'Поменяли текст статьи'}
+    UPDATED_POST_TEXT = {'text': 'Обновленное содержание публикации'}
 
     def test_post_not_found(self, client, post):
-        response = client.get('/api/v1/posts/')
+        posts_endpoint = '/api/v1/posts/'
+        response = client.get(posts_endpoint)
 
         assert response.status_code != HTTPStatus.NOT_FOUND, (
-            'Страница `/api/v1/posts/` не найдена, проверьте этот адрес в '
-            '*urls.py*.'
+            f'Эндпоинт "{posts_endpoint}" не обнаружен. Проверьте '
+            'настройки маршрутизации в файле *urls.py*.'
         )
 
     def test_post_not_auth(self, client, post):
-        response = client.get('/api/v1/posts/')
+        posts_endpoint = '/api/v1/posts/'
+        response = client.get(posts_endpoint)
 
         assert response.status_code == HTTPStatus.UNAUTHORIZED, (
-            'Проверьте, что при GET-запросе неавторизованного пользователя к '
-            '`/api/v1/posts/` возвращается ответ со статусом 401.'
+            f'GET-запрос неавторизованного пользователя к "{posts_endpoint}" '
+            'должен возвращать статус 401.'
         )
 
-    def check_post_data(self,
-                        response_data,
-                        request_method_and_url,
-                        db_post=None):
-        expected_fields = ('id', 'text', 'author', 'pub_date')
-        for field in expected_fields:
-            assert field in response_data, (
-                'Проверьте, что для авторизованного пользователя ответ на '
-                f'{request_method_and_url} содержит поле `{field}` постов.'
+    def verify_post_data(self, post_data, request_description, db_post=None):
+        required_fields = ('id', 'text', 'author', 'pub_date')
+        
+        for field in required_fields:
+            assert field in post_data, (
+                f'Ответ на {request_description} должен содержать '
+                f'поле "{field}".'
             )
+            
         if db_post:
-            assert response_data['author'] == db_post.author.username, (
-                'Проверьте, что при запросе авторизованного пользователя к '
-                f'{request_method_and_url} ответ содержит поле `author` с '
-                'именем автора каждого из постов.'
+            assert post_data['author'] == db_post.author.username, (
+                f'Ответ на {request_description} должен содержать '
+                'корректное имя автора публикации.'
             )
-            assert response_data['id'] == db_post.id, (
-                'Проверьте, что при запросе авторизованного пользователя к '
-                f'{request_method_and_url} в ответе содержится корректный '
-                '`id` поста.'
+            assert post_data['id'] == db_post.id, (
+                f'Ответ на {request_description} должен содержать '
+                'корректный идентификатор публикации.'
             )
 
     @pytest.mark.django_db(transaction=True)
     def test_posts_auth_get(self, user_client, post, another_post):
-        response = user_client.get('/api/v1/posts/')
+        posts_endpoint = '/api/v1/posts/'
+        response = user_client.get(posts_endpoint)
+        
         assert response.status_code == HTTPStatus.OK, (
-            'Проверьте, что для авторизованного пользователя GET-запрос к '
-            '`/api/v1/posts/` возвращает статус 200.'
+            f'GET-запрос авторизованного пользователя к "{posts_endpoint}" '
+            'должен возвращать статус 200.'
         )
 
-        test_data = response.json()
-        assert isinstance(test_data, list), (
-            'Проверьте, что для авторизованного пользователя GET-запрос к '
-            '`/api/v1/posts/` возвращает список.'
+        response_data = response.json()
+        assert isinstance(response_data, list), (
+            f'GET-запрос авторизованного пользователя к "{posts_endpoint}" '
+            'должен возвращать список публикаций.'
         )
 
-        assert len(test_data) == Post.objects.count(), (
-            'Проверьте, что для авторизованного пользователя GET-запрос к '
-            '`/api/v1/posts/` возвращает список всех постов.'
+        assert len(response_data) == Post.objects.count(), (
+            f'GET-запрос авторизованного пользователя к "{posts_endpoint}" '
+            'должен возвращать все существующие публикации.'
         )
 
-        db_post = Post.objects.first()
-        test_post = test_data[0]
-        self.check_post_data(
-            test_post,
-            'GET-запрос к `/api/v1/posts/`',
-            db_post
+        first_post = Post.objects.first()
+        test_post_data = response_data[0]
+        self.verify_post_data(
+            test_post_data,
+            f'GET-запрос к "{posts_endpoint}"',
+            first_post
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_create_auth_with_invalid_data(self, user_client):
-        posts_count = Post.objects.count()
-        response = user_client.post('/api/v1/posts/', data={})
+        posts_endpoint = '/api/v1/posts/'
+        initial_posts_count = Post.objects.count()
+        
+        response = user_client.post(posts_endpoint, data={})
+        
         assert response.status_code == HTTPStatus.BAD_REQUEST, (
-            'Проверьте, что для авторизованного пользователя POST-запрос с '
-            'некорректными данными к `/api/v1/posts/` возвращает ответ со '
-            'статусом 400.'
+            f'POST-запрос с некорректными данными к "{posts_endpoint}" '
+            'должен возвращать статус 400.'
         )
-        assert posts_count == Post.objects.count(), (
-            'Проверьте, что POST-запрос к `/api/v1/posts/` с некорректными '
-            'данными не создает новый пост.'
+        assert initial_posts_count == Post.objects.count(), (
+            f'POST-запрос с некорректными данными к "{posts_endpoint}" '
+            'не должен создавать новую публикацию.'
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_create_auth_with_valid_data(self, user_client, user):
-        post_count = Post.objects.count()
-
-        data = {'text': 'Статья номер 3'}
-        response = user_client.post('/api/v1/posts/', data=data)
+        posts_endpoint = '/api/v1/posts/'
+        initial_posts_count = Post.objects.count()
+        new_post_data = {'text': 'Содержание новой публикации'}
+        
+        response = user_client.post(posts_endpoint, data=new_post_data)
+        
         assert response.status_code == HTTPStatus.CREATED, (
-            'Проверьте, что для авторизованного пользователя  POST-запрос с '
-            'корректными данными к `/api/v1/posts/` возвращает ответ со '
-            'статусом 201.'
+            f'POST-запрос с корректными данными к "{posts_endpoint}" '
+            'должен возвращать статус 201.'
         )
 
-        test_data = response.json()
-        assert isinstance(test_data, dict), (
-            'Проверьте, что для авторизованного пользователя POST-запрос к '
-            '`/api/v1/posts/` возвращает ответ, содержащий данные нового '
-            'поста в виде словаря.'
+        response_data = response.json()
+        assert isinstance(response_data, dict), (
+            f'POST-запрос к "{posts_endpoint}" должен возвращать '
+            'данные новой публикации в виде словаря.'
         )
-        self.check_post_data(test_data, 'POST-запрос к `/api/v1/posts/`')
-        assert test_data.get('text') == data['text'], (
-            'Проверьте, что для авторизованного пользователя POST-запрос к '
-            '`/api/v1/posts/` возвращает ответ, содержащий текст нового '
-            'поста в неизменном виде.'
+        
+        self.verify_post_data(response_data, f'POST-запрос к "{posts_endpoint}"')
+        
+        assert response_data.get('text') == new_post_data['text'], (
+            f'POST-запрос к "{posts_endpoint}" должен возвращать '
+            'текст публикации в неизменном виде.'
         )
-        assert test_data.get('author') == user.username, (
-            'Проверьте, что для авторизованного пользователя при создании '
-            'поста через POST-запрос к `/api/v1/posts/` ответ содержит поле '
-            '`author` с именем пользователя, отправившего запрос.'
+        assert response_data.get('author') == user.username, (
+            f'POST-запрос к "{posts_endpoint}" должен возвращать '
+            'имя пользователя, создавшего публикацию.'
         )
-        assert post_count + 1 == Post.objects.count(), (
-            'Проверьте, что POST-запрос с корректными данными от '
-            'авторизованного пользователя к `/api/v1/posts/` создает новый '
-            'пост.'
+        assert initial_posts_count + 1 == Post.objects.count(), (
+            f'POST-запрос с корректными данными к "{posts_endpoint}" '
+            'должен создавать новую публикацию.'
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_unauth_create(self, client, user, another_user):
-        posts_conut = Post.objects.count()
-
-        data = {'author': another_user.id, 'text': 'Статья номер 3'}
-        response = client.post('/api/v1/posts/', data=data)
+        posts_endpoint = '/api/v1/posts/'
+        initial_posts_count = Post.objects.count()
+        new_post_data = {'author': another_user.id, 'text': 'Тестовая публикация'}
+        
+        response = client.post(posts_endpoint, data=new_post_data)
+        
         assert response.status_code == HTTPStatus.UNAUTHORIZED, (
-            'Проверьте, что POST-запрос неавторизованного пользователя к '
-            '`/api/v1/posts/` возвращает ответ со статусом 401.'
+            f'POST-запрос неавторизованного пользователя к "{posts_endpoint}" '
+            'должен возвращать статус 401.'
         )
-
-        assert posts_conut == Post.objects.count(), (
-            'Проверьте, что POST-запрос неавторизованного пользователя к '
-            '`/api/v1/posts/` не создает новый пост.'
+        assert initial_posts_count == Post.objects.count(), (
+            f'POST-запрос неавторизованного пользователя к "{posts_endpoint}" '
+            'не должен создавать новую публикацию.'
         )
 
     def test_post_get_current(self, user_client, post):
-        response = user_client.get(f'/api/v1/posts/{post.id}/')
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
+        response = user_client.get(post_detail_endpoint)
 
         assert response.status_code == HTTPStatus.OK, (
-            'Страница `/api/v1/posts/{id}/` не найдена, проверьте этот адрес '
-            'в *urls.py*.'
+            f'Эндпоинт "{post_detail_endpoint}" не найден. Проверьте '
+            'настройки маршрутизации в файле *urls.py*.'
         )
 
-        test_data = response.json()
-        self.check_post_data(
-            test_data,
-            'GET-запрос к `/api/v1/posts/{id}/`',
+        response_data = response.json()
+        self.verify_post_data(
+            response_data,
+            f'GET-запрос к "{post_detail_endpoint}"',
             post
         )
 
     @pytest.mark.django_db(transaction=True)
     @pytest.mark.parametrize('http_method', ('put', 'patch'))
-    def test_post_change_auth_with_valid_data(self, user_client, post,
-                                              http_method):
+    def test_post_change_auth_with_valid_data(self, user_client, post, http_method):
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
         request_func = getattr(user_client, http_method)
-        response = request_func(f'/api/v1/posts/{post.id}/',
-                                data=self.VALID_DATA)
-        http_method = http_method.upper()
+        
+        response = request_func(post_detail_endpoint, data=self.UPDATED_POST_TEXT)
+        
+        http_method_upper = http_method.upper()
         assert response.status_code == HTTPStatus.OK, (
-            f'Проверьте, что для авторизованного пользователя {http_method}'
-            '-запрос к `/api/v1/posts/{id}/` вернётся ответ со статусом '
-            '200.'
+            f'{http_method_upper}-запрос авторизованного пользователя к '
+            f'"{post_detail_endpoint}" должен возвращать статус 200.'
         )
 
-        test_post = Post.objects.filter(id=post.id).first()
-        assert test_post, (
-            f'Проверьте, что {http_method}-запрос авторизованного '
-            'пользователя к `/api/v1/posts/{id}/` не удаляет редактируемый '
-            'пост.'
+        updated_post = Post.objects.filter(id=post.id).first()
+        assert updated_post, (
+            f'{http_method_upper}-запрос авторизованного пользователя к '
+            f'"{post_detail_endpoint}" не должен удалять публикацию.'
         )
-        assert test_post.text == self.VALID_DATA['text'], (
-            f'Проверьте, что {http_method}-запрос авторизованного '
-            'пользователя к `/api/v1/posts/{id}/` вносит изменения в пост.'
+        assert updated_post.text == self.UPDATED_POST_TEXT['text'], (
+            f'{http_method_upper}-запрос авторизованного пользователя к '
+            f'"{post_detail_endpoint}" должен обновлять содержание публикации.'
         )
 
     @pytest.mark.django_db(transaction=True)
     @pytest.mark.parametrize('http_method', ('put', 'patch'))
-    def test_post_change_not_auth_with_valid_data(self, client, post,
-                                                  http_method):
+    def test_post_change_not_auth_with_valid_data(self, client, post, http_method):
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
         request_func = getattr(client, http_method)
-        response = request_func(f'/api/v1/posts/{post.id}/',
-                                data=self.VALID_DATA)
-        http_method = http_method.upper()
+        
+        response = request_func(post_detail_endpoint, data=self.UPDATED_POST_TEXT)
+        
+        http_method_upper = http_method.upper()
         assert response.status_code == HTTPStatus.UNAUTHORIZED, (
-            f'Проверьте, что {http_method}-запрос неавторизованного '
-            'пользователя к `/api/v1/posts/{id}/` возвращает ответ со '
-            'статусом 401.'
+            f'{http_method_upper}-запрос неавторизованного пользователя к '
+            f'"{post_detail_endpoint}" должен возвращать статус 401.'
         )
+        
         db_post = Post.objects.filter(id=post.id).first()
-        assert db_post.text != self.VALID_DATA['text'], (
-            f'Проверьте, что {http_method}'
-            '-запрос неавторизованного пользователя к `/api/v1/posts/{id}/` '
-            'не вносит изменения в пост.'
+        assert db_post.text != self.UPDATED_POST_TEXT['text'], (
+            f'{http_method_upper}-запрос неавторизованного пользователя к '
+            f'"{post_detail_endpoint}" не должен изменять содержание публикации.'
         )
 
     @pytest.mark.django_db(transaction=True)
     @pytest.mark.parametrize('http_method', ('put', 'patch'))
-    def test_post_change_not_author_with_valid_data(self, user_client,
-                                                    another_post, http_method):
+    def test_post_change_not_author_with_valid_data(self, user_client, another_post, http_method):
+        post_detail_endpoint = f'/api/v1/posts/{another_post.id}/'
         request_func = getattr(user_client, http_method)
-        response = request_func(f'/api/v1/posts/{another_post.id}/',
-                                data=self.VALID_DATA)
-        http_method = http_method.upper()
+        
+        response = request_func(post_detail_endpoint, data=self.UPDATED_POST_TEXT)
+        
+        http_method_upper = http_method.upper()
         assert response.status_code == HTTPStatus.FORBIDDEN, (
-            f'Проверьте, что {http_method}'
-            '-запрос авторизованного пользователя к `/api/v1/posts/{id}/` '
-            'для чужого поста возвращает ответ со статусом 403.'
+            f'{http_method_upper}-запрос авторизованного пользователя к '
+            f'"{post_detail_endpoint}" для чужой публикации должен '
+            'возвращать статус 403.'
         )
 
         db_post = Post.objects.filter(id=another_post.id).first()
-        assert db_post.text != self.VALID_DATA['text'], (
-            f'Проверьте, что {http_method}'
-            '-запрос авторизованного пользователя к `/api/v1/posts/{id}/` '
-            'для чужого поста не вносит изменения в пост.'
+        assert db_post.text != self.UPDATED_POST_TEXT['text'], (
+            f'{http_method_upper}-запрос авторизованного пользователя к '
+            f'"{post_detail_endpoint}" для чужой публикации не должен '
+            'изменять ее содержание.'
         )
 
     @pytest.mark.django_db(transaction=True)
     @pytest.mark.parametrize('http_method', ('put', 'patch'))
-    def test_post_patch_auth_with_invalid_data(self, user_client, post,
-                                               http_method):
+    def test_post_patch_auth_with_invalid_data(self, user_client, post, http_method):
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
         request_func = getattr(user_client, http_method)
-        response = request_func(f'/api/v1/posts/{post.id}/',
-                                data={'text': {}},
-                                format='json')
+        
+        response = request_func(
+            post_detail_endpoint,
+            data={'text': {}},
+            format='json'
+        )
+        
+        http_method_upper = http_method.upper()
         assert response.status_code == HTTPStatus.BAD_REQUEST, (
-            f'Проверьте, что {http_method}'
-            '-запрос с некорректными данными от авторизованного пользователя '
-            'к `/api/v1/posts/{id}/` возвращает ответ с кодом 400.'
+            f'{http_method_upper}-запрос с некорректными данными к '
+            f'"{post_detail_endpoint}" должен возвращать статус 400.'
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_delete_by_author(self, user_client, post):
-        response = user_client.delete(f'/api/v1/posts/{post.id}/')
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
+        response = user_client.delete(post_detail_endpoint)
+        
         assert response.status_code == HTTPStatus.NO_CONTENT, (
-            'Проверьте, что для автора поста DELETE-запрос к '
-            ' `/api/v1/posts/{id}/` возвращает ответ со статусом 204.'
+            f'DELETE-запрос автора публикации к "{post_detail_endpoint}" '
+            'должен возвращать статус 204.'
         )
 
-        test_post = Post.objects.filter(id=post.id).first()
-        assert not test_post, (
-            'Проверьте, что DELETE-запрос автора поста к '
-            ' `/api/v1/posts/{id}/` удаляет этот пост.'
+        deleted_post = Post.objects.filter(id=post.id).first()
+        assert not deleted_post, (
+            f'DELETE-запрос автора публикации к "{post_detail_endpoint}" '
+            'должен удалять публикацию.'
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_delete_not_author(self, user_client, another_post):
-        response = user_client.delete(f'/api/v1/posts/{another_post.id}/')
+        post_detail_endpoint = f'/api/v1/posts/{another_post.id}/'
+        response = user_client.delete(post_detail_endpoint)
+        
         assert response.status_code == HTTPStatus.FORBIDDEN, (
-            'Проверьте, что DELETE-запрос авторизованного пользователя к '
-            '`/api/v1/posts/{id}/` чужого поста '
-            'вернёт ответ со статусом 403.'
+            f'DELETE-запрос авторизованного пользователя к "{post_detail_endpoint}" '
+            'для чужой публикации должен возвращать статус 403.'
         )
 
-        test_post = Post.objects.filter(id=another_post.id).first()
-        assert test_post, (
-            'Проверьте, что авторизованный пользователь не может удалить '
-            'чужой пост.'
+        post_exists = Post.objects.filter(id=another_post.id).first()
+        assert post_exists, (
+            'Авторизованный пользователь не должен иметь возможности '
+            'удалять чужие публикации.'
         )
 
     @pytest.mark.django_db(transaction=True)
     def test_post_unauth_delete_current(self, client, post):
-        response = client.delete(f'/api/v1/posts/{post.id}/')
+        post_detail_endpoint = f'/api/v1/posts/{post.id}/'
+        response = client.delete(post_detail_endpoint)
+        
         assert response.status_code == HTTPStatus.UNAUTHORIZED, (
-            'Проверьте, что DELETE-запрос неавторизованного пользователя '
-            'к `/api/v1/posts/{id}/` вернёт ответ со статусом 401.'
+            f'DELETE-запрос неавторизованного пользователя к "{post_detail_endpoint}" '
+            'должен возвращать статус 401.'
         )
-        test_post = Post.objects.filter(id=post.id).first()
-        assert test_post, (
-            'Проверьте, что DELETE-запрос неавторизованного пользователя '
-            'к `/api/v1/posts/{id}/` не удаляет запрошенный пост.'
+        
+        post_exists = Post.objects.filter(id=post.id).first()
+        assert post_exists, (
+            f'DELETE-запрос неавторизованного пользователя к "{post_detail_endpoint}" '
+            'не должен удалять публикацию.'
         )

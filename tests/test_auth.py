@@ -4,28 +4,32 @@ from http import HTTPStatus
 class TestAuthAPI:
 
     def test_auth(self, client, user, password):
-        response = client.post(
-            '/api/v1/api-token-auth/',
-            data={'username': user.username, 'password': password}
-        )
+        auth_endpoint = '/api/v1/api-token-auth/'
+        credentials = {'username': user.username, 'password': password}
+        
+        response = client.post(auth_endpoint, data=credentials)
+        
         assert response.status_code != HTTPStatus.NOT_FOUND, (
-            'Страница `/api/v1/api-token-auth/` не найдена, проверьте этот '
-            'адрес в *urls.py*.'
+            f'Эндпоинт "{auth_endpoint}" не найден. Проверьте настройки '
+            'маршрутизации в файле *urls.py*.'
         )
         assert response.status_code == HTTPStatus.OK, (
-            'Проверьте, что POST-запрос к `/api/v1/api-token-auth/` '
-            'возвращает ответ с кодом 200.'
+            f'POST-запрос к "{auth_endpoint}" должен возвращать '
+            'статус 200 при успешной аутентификации.'
         )
 
-        auth_data = response.json()
-        assert 'token' in auth_data, (
-            'Проверьте, что ответ на POST-запрос с валидными данными к '
-            '`/api/v1/api-token-auth/` содержит токен.'
+        response_data = response.json()
+        assert 'token' in response_data, (
+            f'Ответ на POST-запрос к "{auth_endpoint}" с корректными '
+            'учетными данными должен содержать токен аутентификации.'
         )
 
     def test_auth_with_invalid_data(self, client, user):
-        response = client.post('/api/v1/api-token-auth/', data={})
+        auth_endpoint = '/api/v1/api-token-auth/'
+        
+        response = client.post(auth_endpoint, data={})
+        
         assert response.status_code == HTTPStatus.BAD_REQUEST, (
-            'Проверьте, что POST-запрос к `/api/v1/api-token-auth/` '
-            'с некорректными данными возвращает ответ со статусовм 400.'
+            f'POST-запрос к "{auth_endpoint}" с некорректными данными '
+            'должен возвращать статус 400.'
         )
